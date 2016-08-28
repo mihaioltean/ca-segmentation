@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <time.h>
 #include <cstdlib>
+#include <inttypes.h>
 
 #include <random>
 
@@ -270,6 +271,44 @@ struct t_parameters{
 #endif
 };
 //---------------------------------------------------------------------------
+struct t_seed{
+	uint32_t z1, z2, z3, z4;
+	t_seed(void)
+	{
+		z1 = z2 = z3 = z4 = 12345;
+	}
+	void init(uint32_t seed)
+	{
+		z1 = z2 = z3 = z4 = 12345 + seed;
+	}
+};
+//---------------------------------------------------------------------------
+uint32_t RNG(t_seed &seed)
+{
+	uint32_t b;
+	b = ((seed.z1 << 6) ^ seed.z1) >> 13;
+	seed.z1 = ((seed.z1 & 4294967294U) << 18) ^ b;
+	b = ((seed.z2 << 2) ^ seed.z2) >> 27;
+	seed.z2 = ((seed.z2 & 4294967288U) << 2) ^ b;
+	b = ((seed.z3 << 13) ^ seed.z3) >> 21;
+	seed.z3 = ((seed.z3 & 4294967280U) << 7) ^ b;
+	b = ((seed.z4 << 3) ^ seed.z4) >> 12;
+	seed.z4 = ((seed.z4 & 4294967168U) << 13) ^ b;
+	return (seed.z1 ^ seed.z2 ^ seed.z3 ^ seed.z4);
+}
+//---------------------------------------------------------------------------
+uint32_t my_int_rand(t_seed &seed, uint32_t _min, uint32_t _max)
+{
+	return RNG(seed) % (_max - _min + 1) + _min;
+}
+//---------------------------------------------------------------------------
+double my_real_rand(t_seed &seed, double _min, double _max)
+{
+	return RNG(seed) * 2.3283064365386963e-10 * (_max - _min) + _min;
+}
+//---------------------------------------------------------------------------
+
+/*
 #if defined (_MSC_VER)  // Visual studio
 #define thread_local __declspec( thread )
 #elif defined (__GCC__) // GCC
@@ -278,9 +317,6 @@ struct t_parameters{
 
 using namespace std;
 
-/* Thread-safe function that returns a random number between min and max (inclusive).
-This function takes ~142% the time that calling rand() would take. For this extra
-cost you get a better uniform distribution and thread-safety. */
 #ifdef USE_THREADS
 
 int my_int_rand(int _min, int _max)
@@ -311,7 +347,7 @@ double my_real_rand(int _min, int _max)
 	return rand() / (double)RAND_MAX * (_max - _min) + _min;
 }
 #endif
-
+*/
 
 /*
 std::mutex rand_mutex;
@@ -403,37 +439,37 @@ void copy_individual(t_chromosome& dest, const t_chromosome& source, t_parameter
 	dest.num_steps_ca = source.num_steps_ca;
 }
 //---------------------------------------------------------------------------
-void generate_random_chromosome(t_chromosome &a_chromosome, t_parameters &params) // randomly initializes the individuals
+void generate_random_chromosome(t_chromosome &a_chromosome, t_parameters &params, t_seed &seed) // randomly initializes the individuals
 {
 	// generate constants first
 	for (int c = 0; c < params.num_constants; c++)
-		a_chromosome.constants[c] = my_int_rand(params.constants_min, params.constants_max);
+		a_chromosome.constants[c] = my_int_rand(seed, params.constants_min, params.constants_max);
 
 	// on the first position we can have only a variable or a constant
 	double sum = params.variables_probability + params.constants_probability;
-	double p = my_real_rand(0, sum);
+	double p = my_real_rand(seed, 0, sum);
 
 	if (p <= params.variables_probability)
-		a_chromosome.prg[0].op = my_int_rand(0, num_variables - 1);
+		a_chromosome.prg[0].op = my_int_rand(seed, 0, num_variables - 1);
 	else
-		a_chromosome.prg[0].op = num_variables + my_int_rand(0, params.num_constants - 1);
+		a_chromosome.prg[0].op = num_variables + my_int_rand(seed, 0, params.num_constants - 1);
 
 	// for all other genes we put either an operator, variable or constant
 	for (int i = 1; i < params.code_length; i++) {
-		double p = my_real_rand(0, 1);
+		double p = my_real_rand(seed, 0, 1);
 
 		if (p <= params.operators_probability)
-			a_chromosome.prg[i].op = -1 - my_int_rand(0, num_operators - 1);        // an operator
+			a_chromosome.prg[i].op = -1 - my_int_rand(seed, 0, num_operators - 1);        // an operator
 		else
 			if (p <= params.operators_probability + params.variables_probability)
-				a_chromosome.prg[i].op = my_int_rand(0, num_variables - 1);     // a variable
+				a_chromosome.prg[i].op = my_int_rand(seed, 0, num_variables - 1);     // a variable
 			else
-				a_chromosome.prg[i].op = num_variables + my_int_rand(0, params.num_constants - 1); // index of a constant
+				a_chromosome.prg[i].op = num_variables + my_int_rand(seed, 0, params.num_constants - 1); // index of a constant
 
-		a_chromosome.prg[i].adr1 = my_int_rand(0, i - 1);
-		a_chromosome.prg[i].adr2 = my_int_rand(0, i - 1);
-		a_chromosome.prg[i].adr3 = my_int_rand(0, i - 1);
-		a_chromosome.prg[i].adr4 = my_int_rand(0, i - 1);
+		a_chromosome.prg[i].adr1 = my_int_rand(seed, 0, i - 1);
+		a_chromosome.prg[i].adr2 = my_int_rand(seed, 0, i - 1);
+		a_chromosome.prg[i].adr3 = my_int_rand(seed, 0, i - 1);
+		a_chromosome.prg[i].adr4 = my_int_rand(seed, 0, i - 1);
 	}
 }
 //---------------------------------------------------------------------------
@@ -732,65 +768,65 @@ void test_ca(t_chromosome &c, int code_length, t_rgb **original_matrix, unsigned
 	delete[] eval_array;
 }
 //---------------------------------------------------------------------------
-void mutation(t_chromosome &a_chromosome, t_parameters& params) // mutate the individual
+void mutation(t_chromosome &a_chromosome, t_parameters& params, t_seed& seed) // mutate the individual
 {
 	// mutate each symbol with the given probability
 	// first gene must be a variable or constant
-	double p = my_real_rand(0, 1);
+	double p = my_real_rand(seed, 0, 1);
 	if (p < params.mutation_probability) {
 		double sum = params.variables_probability + params.constants_probability;
-		double p = my_real_rand(0, sum);
+		double p = my_real_rand(seed, 0, sum);
 
 		if (p <= params.variables_probability)
-			a_chromosome.prg[0].op = my_int_rand(0, num_variables - 1);
+			a_chromosome.prg[0].op = my_int_rand(seed, 0, num_variables - 1);
 		else
-			a_chromosome.prg[0].op = num_variables + my_int_rand(0, params.num_constants - 1);
+			a_chromosome.prg[0].op = num_variables + my_int_rand(seed, 0, params.num_constants - 1);
 	}
 	// other genes
 	for (int i = 1; i < params.code_length; i++) {
-		p = my_real_rand(0, 1);      // mutate the operator
+		p = my_real_rand(seed, 0, 1);      // mutate the operator
 		if (p < params.mutation_probability) {
 			// we mutate it, but we have to decide what we put here
-			p = my_real_rand(0, 1);
+			p = my_real_rand(seed, 0, 1);
 
 			if (p <= params.operators_probability)
-				a_chromosome.prg[i].op = -1 - my_int_rand(0, num_operators - 1);
+				a_chromosome.prg[i].op = -1 - my_int_rand(seed, 0, num_operators - 1);
 			else
 				if (p <= params.operators_probability + params.variables_probability)
-					a_chromosome.prg[i].op = my_int_rand(0, num_variables - 1);
+					a_chromosome.prg[i].op = my_int_rand(seed, 0, num_variables - 1);
 				else
-					a_chromosome.prg[i].op = num_variables + my_int_rand(0, params.num_constants - 1); // index of a constant
+					a_chromosome.prg[i].op = num_variables + my_int_rand(seed, 0, params.num_constants - 1); // index of a constant
 		}
 
-		p = my_real_rand(0, 1);      // mutate the first address  (adr1)
+		p = my_real_rand(seed, 0, 1);      // mutate the first address  (adr1)
 		if (p < params.mutation_probability)
-			a_chromosome.prg[i].adr1 = my_int_rand(0, i - 1);
+			a_chromosome.prg[i].adr1 = my_int_rand(seed, 0, i - 1);
 
-		p = my_real_rand(0, 1);      // mutate the second address   (adr2)
+		p = my_real_rand(seed, 0, 1);      // mutate the second address   (adr2)
 		if (p < params.mutation_probability)
-			a_chromosome.prg[i].adr2 = my_int_rand(0, i - 1);
+			a_chromosome.prg[i].adr2 = my_int_rand(seed, 0, i - 1);
 
-		p = my_real_rand(0, 1);      // mutate the second address   (adr2)
+		p = my_real_rand(seed, 0, 1);      // mutate the second address   (adr2)
 		if (p < params.mutation_probability)
-			a_chromosome.prg[i].adr3 = my_int_rand(0, i - 1);
+			a_chromosome.prg[i].adr3 = my_int_rand(seed, 0, i - 1);
 
-		p = my_real_rand(0, 1);      // mutate the second address   (adr2)
+		p = my_real_rand(seed, 0, 1);      // mutate the second address   (adr2)
 		if (p < params.mutation_probability)
-			a_chromosome.prg[i].adr4 = my_int_rand(0, i - 1);
+			a_chromosome.prg[i].adr4 = my_int_rand(seed, 0, i - 1);
 	}
 	// mutate the constants
 	for (int c = 0; c < params.num_constants; c++) {
-		p = my_real_rand(0, 1);
+		p = my_real_rand(seed, 0, 1);
 		if (p < params.mutation_probability)
-			a_chromosome.constants[c] = my_int_rand(params.constants_min, params.constants_max);
+			a_chromosome.constants[c] = my_int_rand(seed, params.constants_min, params.constants_max);
 	}
 
 	//a_chromosome.simplify(params.code_length);
 }
 //---------------------------------------------------------------------------
-void one_cut_point_crossover(const t_chromosome &parent1, const t_chromosome &parent2, t_parameters &params, t_chromosome &offspring1, t_chromosome &offspring2)
+void one_cut_point_crossover(const t_chromosome &parent1, const t_chromosome &parent2, t_parameters &params, t_seed& seed, t_chromosome &offspring1, t_chromosome &offspring2)
 {
-	int cutting_pct = my_int_rand(0, params.code_length - 1);
+	int cutting_pct = my_int_rand(seed, 0, params.code_length - 1);
 	for (int i = 0; i < cutting_pct; i++) {
 		offspring1.prg[i] = parent1.prg[i];
 		offspring2.prg[i] = parent2.prg[i];
@@ -801,7 +837,7 @@ void one_cut_point_crossover(const t_chromosome &parent1, const t_chromosome &pa
 	}
 	// now the constants
 	if (params.num_constants) {
-		cutting_pct = my_int_rand(0, params.num_constants - 1);
+		cutting_pct = my_int_rand(seed, 0, params.num_constants - 1);
 		for (int i = 0; i < cutting_pct; i++) {
 			offspring1.constants[i] = parent1.constants[i];
 			offspring2.constants[i] = parent2.constants[i];
@@ -815,10 +851,10 @@ void one_cut_point_crossover(const t_chromosome &parent1, const t_chromosome &pa
 	//offspring2.simplify(params.code_length);
 }
 //---------------------------------------------------------------------------
-void uniform_crossover(const t_chromosome &parent1, const t_chromosome &parent2, t_parameters &params, t_chromosome &offspring1, t_chromosome &offspring2)
+void uniform_crossover(const t_chromosome &parent1, const t_chromosome &parent2, t_parameters &params, t_seed& seed, t_chromosome &offspring1, t_chromosome &offspring2)
 {
 	for (int i = 0; i < params.code_length; i++)
-		if (my_int_rand(0, 1)) {
+		if (my_int_rand(seed, 0, 1)) {
 			offspring1.prg[i] = parent1.prg[i];
 			offspring2.prg[i] = parent2.prg[i];
 		}
@@ -829,7 +865,7 @@ void uniform_crossover(const t_chromosome &parent1, const t_chromosome &parent2,
 
 		// constants
 		for (int i = 0; i < params.num_constants; i++)
-			if (my_int_rand(0, 1)) {
+			if (my_int_rand(seed, 0, 1)) {
 				offspring1.constants[i] = parent1.constants[i];
 				offspring2.constants[i] = parent2.constants[i];
 			}
@@ -884,21 +920,21 @@ bool print_chromosome(t_chromosome& a, t_parameters &params, char *filename)
 		return false;
 }
 //---------------------------------------------------------------------------
-int tournament_selection(t_chromosome *a_sub_pop, int sub_pop_size, int tournament_size)     // Size is the size of the tournament
+int tournament_selection(t_chromosome *a_sub_pop, t_seed& seed, int sub_pop_size, int tournament_size)     // Size is the size of the tournament
 {
 	int r, p;
-	p = my_int_rand(0, sub_pop_size - 1);
+	p = my_int_rand(seed, 0, sub_pop_size - 1);
 	for (int i = 1; i < tournament_size; i++) {
-		r = my_int_rand(0, sub_pop_size - 1);
+		r = my_int_rand(seed, 0, sub_pop_size - 1);
 		p = a_sub_pop[r].fitness < a_sub_pop[p].fitness ? r : p;
 	}
 	return p;
 }
 //---------------------------------------------------------------------------
 #ifdef USE_THREADS
-void evolve_one_subpopulation(int *current_subpop_index, std::mutex* mutex, t_chromosome ** sub_populations, int generation_index, t_parameters *params, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region *clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
+void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, std::mutex* mutex, t_chromosome ** sub_populations, int generation_index, t_parameters *params, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region *clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
 #else
-void evolve_one_subpopulation(int *current_subpop_index, t_chromosome ** sub_populations, int generation_index, t_parameters *params, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region *clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
+void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromosome ** sub_populations, int generation_index, t_parameters *params, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region *clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
 
 #endif
 {
@@ -926,7 +962,7 @@ void evolve_one_subpopulation(int *current_subpop_index, t_chromosome ** sub_pop
 			if (generation_index == 0) {
 				for (int i = 0; i < params->sub_population_size; i++) {
 					//printf("pop index = %d  i = %d: ", pop_index, i);
-					generate_random_chromosome(a_sub_population[i], *params);
+					generate_random_chromosome(a_sub_population[i], *params, seeds[pop_index]);
 					//printf("//////////////////////////////////\n");
 					fitness(a_sub_population[i], params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 				}
@@ -938,23 +974,23 @@ void evolve_one_subpopulation(int *current_subpop_index, t_chromosome ** sub_pop
 					// we increase by 2 because at each step we create 2 offspring
 
 					// choose the parents using binary tournament
-					int r1 = tournament_selection(a_sub_population, params->sub_population_size, 2);
-					int r2 = tournament_selection(a_sub_population, params->sub_population_size, 2);
+					int r1 = tournament_selection(a_sub_population, seeds[pop_index], params->sub_population_size, 2);
+					int r2 = tournament_selection(a_sub_population, seeds[pop_index], params->sub_population_size, 2);
 					// crossover
-					double p_0_1 = my_real_rand(0, 1);
+					double p_0_1 = my_real_rand(seeds[pop_index], 0, 1);
 					if (p_0_1 < params->crossover_probability)
-						one_cut_point_crossover(a_sub_population[r1], a_sub_population[r2], *params, offspring1, offspring2);
+						one_cut_point_crossover(a_sub_population[r1], a_sub_population[r2], *params, seeds[pop_index], offspring1, offspring2);
 					else {// no crossover so the offspring are a copy of the parents
 						copy_individual(offspring1, a_sub_population[r1], *params);
 						copy_individual(offspring2, a_sub_population[r2], *params);
 					}
 					// mutate the result and compute fitness
-					mutation(offspring1, *params);
+					mutation(offspring1, *params, seeds[pop_index]);
 
 					fitness(offspring1, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 
 					// mutate the other offspring too
-					mutation(offspring2, *params);
+					mutation(offspring2, *params, seeds[pop_index]);
 
 					fitness(offspring2, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 
@@ -976,7 +1012,7 @@ void evolve_one_subpopulation(int *current_subpop_index, t_chromosome ** sub_pop
 	}
 }
 //---------------------------------------------------------------------------
-void start_steady_state_gp(t_parameters &params, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
+void start_steady_state_gp(t_parameters &params, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
 {
 	// a steady state model -
 	// Newly created inviduals replace the worst ones (if the offspring are better) in the same (sub) population.
@@ -1017,7 +1053,7 @@ void start_steady_state_gp(t_parameters &params, t_rgb ***original_matrices, t_r
 #ifdef USE_THREADS
 		int current_subpop_index = 0;
 		for (int t = 0; t < params.num_threads; t++)
-			mep_threads[t] = new std::thread(evolve_one_subpopulation, &current_subpop_index, &mutex, sub_populations, generation, &params, original_matrices, mask_matrices, num_training_images, &clip, work_matrices1[t], work_matrices2[t]);
+			mep_threads[t] = new std::thread(evolve_one_subpopulation, &current_subpop_index, seeds, &mutex, sub_populations, generation, &params, original_matrices, mask_matrices, num_training_images, &clip, work_matrices1[t], work_matrices2[t]);
 
 		for (int t = 0; t < params.num_threads; t++) {
 			mep_threads[t]->join();
@@ -1025,7 +1061,7 @@ void start_steady_state_gp(t_parameters &params, t_rgb ***original_matrices, t_r
 		}
 #else
 		int p = 0;
-		evolve_one_subpopulation(&p, sub_populations, generation, &params, original_matrices, mask_matrices, num_training_images, &clip, work_matrix1, work_matrix2);
+		evolve_one_subpopulation(&p, seeds, sub_populations, generation, &params, original_matrices, mask_matrices, num_training_images, &clip, work_matrix1, work_matrix2);
 #endif
 		// find the best individual
 		best_subpopulation_index = 0; // the index of the subpopulation containing the best invidual
@@ -1036,7 +1072,7 @@ void start_steady_state_gp(t_parameters &params, t_rgb ***original_matrices, t_r
 				best_subpopulation_index = p;
 			for (int q = 0; q < params.sub_population_size; q++) {
 				sum_fitness += sub_populations[p][q].fitness;
-			//	printf("%ld ", sub_populations[p][q].fitness);
+		//		printf("%ld ", sub_populations[p][q].fitness);
 			}
 		}
 		sum_fitness /= params.num_sub_populations * params.sub_population_size;
@@ -1066,7 +1102,7 @@ void start_steady_state_gp(t_parameters &params, t_rgb ***original_matrices, t_r
 		// the copied invidual will replace the worst in the next one (if is better)
 
 		for (int p = 0; p < params.num_sub_populations; p++) {
-			int  k = my_int_rand(0, params.sub_population_size - 1);// the individual to be copied
+			int  k = my_int_rand(seeds[p], 0, params.sub_population_size - 1);// the individual to be copied
 			// replace the worst in the next population (p + 1) - only if is better
 			int index_next_pop = (p + 1) % params.num_sub_populations; // index of the next subpopulation (taken in circular order)
 			if (sub_populations[p][k].fitness < sub_populations[index_next_pop][params.sub_population_size - 1].fitness) {
@@ -1188,7 +1224,7 @@ bool read_input_images(char *path_to_images, int &num_images, t_rgb ***&original
 		return false;
 
 	strcpy(bmp_file_name, path_to_images);
-	strcat(bmp_file_name, "images\\69040_mask.bmp");
+	strcat(bmp_file_name, "69040_mask.bmp");
 	if (!read_image(bmp_file_name, mask_matrix[t], image_width, image_height))
 		return false;
 
@@ -1326,7 +1362,7 @@ int main(void)
 {
 	t_parameters params;
 	params.num_sub_populations = 12;
-	params.sub_population_size = 500;				// the number of individuals in population  (must be an even number!)
+	params.sub_population_size = 100;				// the number of individuals in population  (must be an even number!)
 	params.code_length = 30;
 	params.num_generations = 100000;				// the number of generations
 	params.mutation_probability = 0.01;             // mutation probability
@@ -1373,7 +1409,11 @@ int main(void)
 	time_t start_time;
 	time(&start_time);
 
-	start_steady_state_gp(params, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
+	t_seed* seeds = new t_seed[params.num_sub_populations];
+	for (int i = 0; i < params.num_sub_populations; i++)
+		seeds[i].init(i);
+
+	start_steady_state_gp(params, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
 
 	time_t end_time;
 	time(&end_time);
@@ -1384,6 +1424,8 @@ int main(void)
 
 	delete_matrices(original_matrix, image_height, num_images);
 	delete_matrices(mask_matrix, image_height, num_images);
+
+	delete[] seeds;
 
 
 	printf("Press enter ...");

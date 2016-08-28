@@ -277,9 +277,9 @@ struct t_seed{
 	{
 		z1 = z2 = z3 = z4 = 12345;
 	}
-	void init(uint32_t seed)
+	void init(uint32_t initial_seed, uint32_t seed)
 	{
-		z1 = z2 = z3 = z4 = 12345 + seed;
+		z1 = z2 = z3 = z4 = initial_seed + seed;
 	}
 };
 //---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ uint32_t RNG(t_seed &seed)
 	return (seed.z1 ^ seed.z2 ^ seed.z3 ^ seed.z4);
 }
 //---------------------------------------------------------------------------
-uint32_t my_int_rand(t_seed &seed, uint32_t _min, uint32_t _max)
+uint32_t my_int_rand(t_seed &seed, int _min, int _max)
 {
 	return RNG(seed) % (_max - _min + 1) + _min;
 }
@@ -1409,9 +1409,11 @@ int main(void)
 	time_t start_time;
 	time(&start_time);
 
+	uint32_t initial_seed = 12345; // must be greater than 127
+
 	t_seed* seeds = new t_seed[params.num_sub_populations];
 	for (int i = 0; i < params.num_sub_populations; i++)
-		seeds[i].init(i);
+		seeds[i].init(initial_seed, i);
 
 	start_steady_state_gp(params, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
 

@@ -2,6 +2,7 @@
 //   Compiled with Microsoft Visual C++ 2013
 //   Requires C++11 or newer (for thread support)
 //--------------------------------------------------------------------
+//   version 2016.08.29.0
 
 #define USE_THREADS // comment this line if you don't have a >= C++11 compiler
 
@@ -27,7 +28,7 @@
 
 
 #define num_variables (2 * CA_radius + 1) * (2 * CA_radius + 1) // starts from center then goes CCW from 0 degrees
-#define num_operators 4
+#define num_operators 5
 
 // +   min
 // -   max
@@ -37,11 +38,12 @@
 #define O_MIN -1
 #define O_MAX -2
 #define O_IFABCD -3
-#define O_MAJOR_C -4
-#define O_MIN_C -5
-#define O_MAX_C -6
+#define O_MAJORITAR_C -4
+#define O_MINORITAR_C -5
+#define O_MIN_C -6
+#define O_MAX_C -7
 
-char operators_string[6][10] = { "MIN", "MAX", "IFABCD", "O_MAJOR_C", "MIN_C", "MAX_C" };
+char operators_string[7][20] = { "MIN", "MAX", "IFABCD", "O_MAJORITAR_C", "O_MINORITAR_C", "MIN_C", "MAX_C" };
 
 #define color_tolerance 10
 #define max_num_CA_iterations_with_no_improvements 10
@@ -117,7 +119,7 @@ bool identical(t_rgb &a, t_rgb &b)
 	return abs(a.red - b.red) <= color_tolerance && abs(a.green - b.green) <= color_tolerance && abs(a.blue - b.blue) <= color_tolerance;
 }
 //---------------------------------------------------------------------------
-t_rgb major_rgb(t_rgb &a, t_rgb &b, t_rgb &c)
+t_rgb majoritar_rgb(t_rgb &a, t_rgb &b, t_rgb &c)
 {
 	if (identical(a, b))
 		return a;
@@ -125,6 +127,19 @@ t_rgb major_rgb(t_rgb &a, t_rgb &b, t_rgb &c)
 		return a;
 	if (identical(b, c))
 		return b;
+	// one of them, random
+	return a;
+}
+//---------------------------------------------------------------------------
+t_rgb minoritar_rgb(t_rgb &a, t_rgb &b, t_rgb &c)
+{
+	if (identical(a, b))
+		return c;
+	if (identical(a, c))
+		return b;
+	if (identical(b, c))
+		return a;
+	// one of them, random
 	return a;
 }
 //---------------------------------------------------------------------------
@@ -197,7 +212,11 @@ struct t_chromosome{
 			case O_MAX:
 				mark(prg[k].adr2, marked);
 				break;
-			case O_MAJOR_C:
+			case O_MAJORITAR_C:
+				mark(prg[k].adr2, marked);
+				mark(prg[k].adr3, marked);
+				break;
+			case O_MINORITAR_C:
 				mark(prg[k].adr2, marked);
 				mark(prg[k].adr3, marked);
 				break;
@@ -514,8 +533,11 @@ t_rgb evaluate_chromosome(t_code3 *prg, int code_length, t_rgb* constants, t_rgb
 			case O_MAX:
 				*p++ = max_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2]);
 				break;
-			case O_MAJOR_C:
-				*p++ = major_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2], eval_array[prg[i].adr3]);
+			case O_MAJORITAR_C:
+				*p++ = majoritar_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2], eval_array[prg[i].adr3]);
+				break;
+			case O_MINORITAR_C:
+				*p++ = minoritar_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2], eval_array[prg[i].adr3]);
 				break;
 			case O_IFABCD:
 				*p++ = ifabcd_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2], eval_array[prg[i].adr3], eval_array[prg[i].adr4]);
@@ -1361,8 +1383,8 @@ bool read_input_images(char *path_to_images, int &num_images, t_rgb ***&original
 int main(void)
 {
 	t_parameters params;
-	params.num_sub_populations = 12;
-	params.sub_population_size = 100;				// the number of individuals in population  (must be an even number!)
+	params.num_sub_populations = 6;
+	params.sub_population_size = 200;				// the number of individuals in population  (must be an even number!)
 	params.code_length = 30;
 	params.num_generations = 100000;				// the number of generations
 	params.mutation_probability = 0.01;             // mutation probability
@@ -1388,7 +1410,7 @@ int main(void)
 	int num_images = 0;
 
 	char path_to_images[256];
-	strcpy(path_to_images, "c:\\Mihai\\Dropbox\\ca-segmentation\\images\\");
+	strcpy(path_to_images, "c:\\Mihai\\Dropbox\\ca-segmentation\\images\\"); // must be set by the user
 
 	if (!read_input_images(path_to_images, num_images, original_matrix, mask_matrix, image_width, image_height)) {
 		printf("Cannot find input files! Please specify the full path!");
@@ -1398,6 +1420,7 @@ int main(void)
 
 	srand(2);
 
+	// working on a clip, not on the full image
 	t_clip_region clip;
 	clip.top_x = 0;
 	clip.top_y = 140;

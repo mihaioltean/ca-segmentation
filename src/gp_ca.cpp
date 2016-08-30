@@ -2,7 +2,7 @@
 //   Compiled with Microsoft Visual C++ 2013
 //   Requires C++11 or newer (for thread support)
 //--------------------------------------------------------------------
-//   version 2016.08.29.0
+//   version 2016.08.29.1
 
 #define USE_THREADS // comment this line if you don't have a >= C++11 compiler
 
@@ -43,7 +43,7 @@
 #define O_MIN_C -6
 #define O_MAX_C -7
 
-char operators_string[7][20] = { "MIN", "MAX", "IFABCD", "O_MAJORITAR_C", "O_MINORITAR_C", "MIN_C", "MAX_C" };
+char operators_string[7][20] = { "MIN", "MAX", "IFABCD", "MAJORITAR_C", "MINORITAR_C", "MIN_C", "MAX_C" };
 
 #define color_tolerance 10
 #define max_num_CA_iterations_with_no_improvements 10
@@ -1034,7 +1034,7 @@ void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromo
 	}
 }
 //---------------------------------------------------------------------------
-void start_steady_state_gp(t_parameters &params, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
+void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
 {
 	// a steady state model -
 	// Newly created inviduals replace the worst ones (if the offspring are better) in the same (sub) population.
@@ -1114,10 +1114,10 @@ void start_steady_state_gp(t_parameters &params, t_seed* seeds, t_rgb ***origina
 
 			char file_name[50];
 			for (int c = 0; c < 3; c++) {
-				sprintf(file_name, "ca%d_%d.bmp", generation, c);
+				sprintf(file_name, "ca_%u_%d_%d.bmp", initial_seed, generation, c);
  				test_ca(sub_populations[best_subpopulation_index][0], params.code_length, original_matrices[c], image_width, image_height, file_name);
 			}
-			sprintf(file_name, "ca%d.txt", generation);
+			sprintf(file_name, "ca_%u_%d.txt", initial_seed, generation);
 			print_chromosome(sub_populations[best_subpopulation_index][0], params, file_name);
 		}
 		// now copy one individual from one population to the next one.
@@ -1380,7 +1380,7 @@ bool read_input_images(char *path_to_images, int &num_images, t_rgb ***&original
 	return true; // OK
 }
 //--------------------------------------------------------------------
-int main(void)
+int main(int argc, char** argv)
 {
 	t_parameters params;
 	params.num_sub_populations = 6;
@@ -1418,7 +1418,6 @@ int main(void)
 		return 1;
 	}
 
-	srand(2);
 
 	// working on a clip, not on the full image
 	t_clip_region clip;
@@ -1432,13 +1431,17 @@ int main(void)
 	time_t start_time;
 	time(&start_time);
 
-	uint32_t initial_seed = 12345; // must be greater than 127
+	uint32_t initial_seed;
+	if (argc == 1)
+		initial_seed = 12345; // must be greater than 127
+	else
+		initial_seed = atoi(argv[1]);
 
 	t_seed* seeds = new t_seed[params.num_sub_populations];
 	for (int i = 0; i < params.num_sub_populations; i++)
 		seeds[i].init(initial_seed, i);
 
-	start_steady_state_gp(params, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
+	start_steady_state_gp(params, initial_seed, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
 
 	time_t end_time;
 	time(&end_time);

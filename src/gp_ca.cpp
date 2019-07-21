@@ -1028,6 +1028,61 @@ void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromo
 	}
 }
 //---------------------------------------------------------------------------
+bool save_state(int num_sub_populations, int sub_population_size, int code_length, t_seed* seeds, t_chromosome** sub_populations, int current_generation_index, int initial_seed)
+{
+	char filename[100];
+	sprintf(filename, "state_%d_%d.txt", current_generation_index, initial_seed);
+	FILE* f = fopen(filename, "w");
+
+	if (!f)
+		return false;
+
+	// save parameters
+	fprintf(f, "%d %d %d %d\n", num_sub_populations, sub_population_size, code_length, current_generation_index);
+
+	// save the population
+	char* buffer = new char[code_length * 5 * 11];
+	for (int p = 0; p < num_sub_populations; p++) {
+		//save seeds
+		fprintf(f, "%d %d %d %d\n", seeds[p].z1, seeds[p].z2, seeds[p].z3, seeds[p].z4);
+		for (int c = 0; c < sub_population_size; c++) {
+			sub_populations[p][c].to_string(buffer, code_length);
+			fprintf(f, "%d\n", buffer);
+		}
+	}
+
+	fclose(f);
+}
+//--------------------------------------------------------------------
+bool load_state(const char* filename, t_seed* seeds, t_chromosome** sub_populations, int& current_generation_index)
+{
+	FILE* f = fopen(filename, "r");
+
+	if (!f)
+		return false;
+
+	int num_sub_populations, sub_population_size, code_length;
+
+	// load parameters
+	fscanf(f, "%d %d %d %d\n", &num_sub_populations, &sub_population_size, &code_length, &current_generation_index);
+
+
+	// load the population
+	char* buffer = new char[code_length * 5 * 11];
+	for (int p = 0; p < num_sub_populations; p++) {
+		// load seeds
+		fscanf(f, "%d %d %d %d\n", &seeds[p].z1, &seeds[p].z2, &seeds[p].z3, &seeds[p].z4);
+
+		for (int c = 0; c < sub_population_size; c++) {
+			fgets(buffer, code_length * 5 * 11, f);
+			sub_populations[p][c].from_string(buffer, code_length);
+		}
+	}
+
+	fclose(f);
+}
+//--------------------------------------------------------------------
+
 void start_steady_state_gp(t_chromosome **sub_populations, t_parameters &params, uint32_t initial_seed, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
 {
 	// a steady state model -
@@ -1118,7 +1173,7 @@ void start_steady_state_gp(t_chromosome **sub_populations, t_parameters &params,
 			}
 		}
 
-		save_state(params.num_sub_populations, params.sub_population_size, params.code_length, seeds, sub_populations, generation, int initial_seed);
+		save_state(params.num_sub_populations, params.sub_population_size, params.code_length, seeds, sub_populations, generation, initial_seed);
 	}
 
 #ifdef USE_THREADS
@@ -1145,60 +1200,6 @@ void start_steady_state_gp(t_chromosome **sub_populations, t_parameters &params,
 	delete_matrix(work_matrix1, clip.height + 2 * CA_radius);
 	delete_matrix(work_matrix2, clip.height + 2 * CA_radius);
 #endif
-}
-//--------------------------------------------------------------------
-bool save_state(int num_sub_populations, int sub_population_size, int code_length, t_seed *seeds, t_chromosome **sub_populations, int current_generation_index, int initial_seed)
-{
-	char filename[100];
-	sprintf(filename, "state_%d_%d.txt", current_generation_index, initial_seed);
-	FILE *f = fopen(filename, "w");
-
-	if (!f)
-		return false;
-
-	// save parameters
-	fprintf(f, "%d %d %d %d\n", num_sub_populations, sub_population_size, code_length, current_generation_index);
-
-	// save the population
-	char *buffer = new char[code_length * 5 * 11];
-	for (int p = 0; p < num_sub_populations; p++) {
-		//save seeds
-		fprintf(f, "%d %d %d %d\n", seeds[p].z1, seeds[p].z2, seeds[p].z3, seeds[p].z4);
-		for (int c = 0; c < sub_population_size; c++) {
-			sub_populations[p][c].to_string(buffer, code_length);
-			fprintf(f, "%d\n", buffer);
-		}
-	}
-
-	fclose(f);
-}
-//--------------------------------------------------------------------
-bool load_state(char *filename, t_seed *seeds, t_chromosome **sub_populations, int &current_generation_index)
-{
-	FILE *f = fopen(filename, "r");
-
-	if (!f)
-		return false;
-
-	int num_sub_populations, int sub_population_size, int code_length;
-
-	// load parameters
-	fscanf(f, "%d %d %d %d\n", &num_sub_populations, &sub_population_size, &code_length, &current_generation_index);
-
-
-	// load the population
-	char *buffer = new char[code_length * 5 * 11];
-	for (int p = 0; p < num_sub_populations; p++) {
-		// load seeds
-		fscanf(f, "%d %d %d %d\n", &seeds[p].z1, &seeds[p].z2, &seeds[p].z3, &seeds[p].z4);
-
-		for (int c = 0; c < sub_population_size; c++) {
-			fgets(buffer, code_length * 5 * 11, f);
-			sub_populations[p][c].from_string(buffer, code_length);
-		}
-	}
-
-	fclose(f);
 }
 //--------------------------------------------------------------------
 bool read_image(const char* file_name, t_rgb **&matrix, unsigned long& image_width, unsigned long &image_height)
@@ -1425,7 +1426,7 @@ int main(int argc, char** argv)
 {
 	t_parameters params;
 	params.num_sub_populations = 6;
-	params.sub_population_size = 1000;				// the number of individuals in population  (must be an even number!)
+	params.sub_population_size = 10;				// the number of individuals in population  (must be an even number!)
 	params.code_length = 30;
 	params.num_generations = 100000;				// the number of generations
 	params.mutation_probability = 0.01;             // mutation probability
@@ -1486,7 +1487,7 @@ int main(int argc, char** argv)
 
 	int current_generation_index;
 
-	uint32_t initial_seed;
+	uint32_t initial_seed = 0;
 	if (argc == 1) {
 		initial_seed = 10000; // must be greater than 127
 

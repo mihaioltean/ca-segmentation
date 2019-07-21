@@ -28,7 +28,7 @@
 
 
 #define num_variables (2 * CA_radius + 1) * (2 * CA_radius + 1) // starts from center then goes CCW from 0 degrees
-#define num_operators 5
+#define num_operators 9
 
 // +   min
 // -   max
@@ -37,13 +37,16 @@
 
 #define O_MIN -1
 #define O_MAX -2
-#define O_IFABCD -3
-#define O_MAJORITAR_C -4
-#define O_MINORITAR_C -5
-#define O_MIN_C -6
-#define O_MAX_C -7
+#define O_MEAN -3
+#define O_DIFF -4
+#define O_IFABCD -5
+#define O_MAJORITAR_C -6
+#define O_MINORITAR_C -7
+#define O_MIN_C -8
+#define O_MAX_C -9
 
-char operators_string[7][20] = { "MIN", "MAX", "IFABCD", "MAJORITAR_C", "MINORITAR_C", "MIN_C", "MAX_C" };
+
+char operators_string[9][20] = { "MIN", "MAX", "MEAN", "DIFF", "IFABCD", "MAJORITAR_COLOR", "MINORITAR_COLOR", "MIN_COMPONENT", "MAX_COMPONENT" };
 
 #define color_tolerance 10
 #define max_num_CA_iterations_with_no_improvements 10
@@ -112,6 +115,16 @@ t_rgb max_rgb(t_rgb &c1, t_rgb &c2)
 		return c1;
 	else
 		return c2;
+}
+//---------------------------------------------------------------------------
+t_rgb mean_rgb(t_rgb &c1, t_rgb &c2)
+{
+	return t_rgb((c1.red + c2.red) / 2, (c1.green + c2.green) / 2, (c1.blue + c2.blue) / 2);
+}
+//---------------------------------------------------------------------------
+t_rgb diff_rgb(t_rgb &c1, t_rgb &c2)
+{
+	return t_rgb(abs(c1.red - c2.red), abs(c1.green - c2.green), abs(c1.blue - c2.blue));
 }
 //---------------------------------------------------------------------------
 bool identical(t_rgb &a, t_rgb &b)
@@ -212,6 +225,12 @@ struct t_chromosome{
 			case O_MAX:
 				mark(prg[k].adr2, marked);
 				break;
+			case O_MEAN:
+				mark(prg[k].adr2, marked);
+				break;
+			case O_DIFF:
+				mark(prg[k].adr2, marked);
+				break;
 			case O_MAJORITAR_C:
 				mark(prg[k].adr2, marked);
 				mark(prg[k].adr3, marked);
@@ -268,6 +287,39 @@ struct t_chromosome{
 		delete[] skipped;
 		delete[] marked;
 	}
+	//------------------------------------------------------------------------------
+	void to_string(char * s_dest, int code_length)
+	{
+		char tmp_s[100];
+		s_dest[0] = 0;
+		for (int i = 0; i < code_length; i++) {
+			sprintf(tmp_s, "%d ", prg[i].op);
+			strcat(s_dest, tmp_s);
+			sprintf(tmp_s, "%d ", prg[i].adr1);
+			strcat(s_dest, tmp_s);
+			sprintf(tmp_s, "%d ", prg[i].adr2);
+			strcat(s_dest, tmp_s);
+			sprintf(tmp_s, "%d ", prg[i].adr3);
+			strcat(s_dest, tmp_s);
+			sprintf(tmp_s, "%d ", prg[i].adr4);
+			strcat(s_dest, tmp_s);
+		}
+
+		sprintf(tmp_s, "%lg\n", fitness);
+		strcat(s_dest, tmp_s);
+	}
+	//------------------------------------------------------------------------------
+	void from_string(char* s_source, int code_length)
+	{
+		int num_consumed = 0;
+		for (int i = 0; i < code_length; i++) {
+			sscanf(s_source, "%d%d%d%n", &prg[i].op, &prg[i].adr1, &prg[i].adr2, &prg[i].adr3, &prg[i].adr4, &num_consumed);
+			s_source += num_consumed;
+		}
+		sscanf(s_source, "%lf", &fitness);
+	}
+	//------------------------------------------------------------------------------
+
 
 };
 //---------------------------------------------------------------------------
@@ -326,69 +378,6 @@ double my_real_rand(t_seed &seed, double _min, double _max)
 	return RNG(seed) * 2.3283064365386963e-10 * (_max - _min) + _min;
 }
 //---------------------------------------------------------------------------
-
-/*
-#if defined (_MSC_VER)  // Visual studio
-#define thread_local __declspec( thread )
-#elif defined (__GCC__) // GCC
-#define thread_local __thread
-#endif
-
-using namespace std;
-
-#ifdef USE_THREADS
-
-int my_int_rand(int _min, int _max)
-{
-	static thread_local mt19937* generator = nullptr;
-	if (!generator) generator = new mt19937(clock() + this_thread::get_id().hash());
-	uniform_int_distribution<int> distribution(_min, _max);
-	int r = distribution(*generator);
-	return r;
-}
-
-double my_real_rand(double _min, double _max)
-{
-	static thread_local mt19937* generator = nullptr;
-	if (!generator) generator = new mt19937(clock() + this_thread::get_id().hash());
-	uniform_real_distribution<double> distribution(_min, _max);
-	double r = distribution(*generator);
-	return r;
-}
-
-#else
-int my_int_rand(int _min, int _max)
-{
-	return rand() % (_max - _min + 1) + _min;
-}
-double my_real_rand(int _min, int _max)
-{
-	return rand() / (double)RAND_MAX * (_max - _min) + _min;
-}
-#endif
-*/
-
-/*
-std::mutex rand_mutex;
-int my_rand(void)
-{
-#ifdef USE_THREADS
-	while (!rand_mutex.try_lock()) {}
-	int r = rand();
-	rand_mutex.unlock();
-	printf("%d ", r);
-	return r;
-#else
-	return rand();
-#endif
-}
-*/
-//---------------------------------------------------------------------------
-//static std::mt19937 rng(std::random_device{}());
-//static std::uniform_int_distribution<int> uni;
-
-//return uni(rng);
-
 void allocate_chromosome(t_chromosome &c, t_parameters &params)
 {
 	c.prg = new t_code3[params.code_length];
@@ -533,6 +522,12 @@ t_rgb evaluate_chromosome(t_code3 *prg, int code_length, t_rgb* constants, t_rgb
 			case O_MAX:
 				*p++ = max_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2]);
 				break;
+			case O_MEAN:
+				*p++ = mean_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2]);
+				break;
+			case O_DIFF:
+				*p++ = diff_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2]);
+				break;
 			case O_MAJORITAR_C:
 				*p++ = majoritar_rgb(eval_array[prg[i].adr1], eval_array[prg[i].adr2], eval_array[prg[i].adr3]);
 				break;
@@ -641,7 +636,7 @@ void extend_matrix(t_rgb **work_matrix1, t_clip_region &clip)
 	}
 }
 //---------------------------------------------------------------------------
-unsigned long fitness_1_image(t_chromosome &c, t_rgb **original_matrix, t_rgb **mask_matrix, t_clip_region &clip, t_rgb **work_matrix1, t_rgb **work_matrix2, int &num_steps_ca)
+unsigned long compute_fitness_1_image(t_chromosome &c, t_rgb **original_matrix, t_rgb **mask_matrix, t_clip_region &clip, t_rgb **work_matrix1, t_rgb **work_matrix2, int &num_steps_ca)
 {
 	// init
 	for (unsigned long y = 0; y < clip.height; y++) {
@@ -721,7 +716,7 @@ unsigned long fitness_1_image(t_chromosome &c, t_rgb **original_matrix, t_rgb **
 	return fitness_1_image;
 }
 //---------------------------------------------------------------------------
-void fitness(t_chromosome &c, int code_length, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region &clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
+void compute_fitness(t_chromosome &c, int code_length, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_training_images, t_clip_region &clip, t_rgb **work_matrix1, t_rgb **work_matrix2)
 {
 	c.simplify(code_length);
 
@@ -729,7 +724,7 @@ void fitness(t_chromosome &c, int code_length, t_rgb ***original_matrices, t_rgb
 	c.num_steps_ca = 0;
 	int CA_num_steps_1_image;
 	for (int i = 0; i < num_training_images; i++) {
-		c.fitness += fitness_1_image(c, original_matrices[i], mask_matrices[i], clip, work_matrix1, work_matrix2, CA_num_steps_1_image);
+		c.fitness += compute_fitness_1_image(c, original_matrices[i], mask_matrices[i], clip, work_matrix1, work_matrix2, CA_num_steps_1_image);
 		if (c.num_steps_ca < CA_num_steps_1_image)
 			c.num_steps_ca = CA_num_steps_1_image;
 	}
@@ -984,9 +979,8 @@ void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromo
 			if (generation_index == 0) {
 				for (int i = 0; i < params->sub_population_size; i++) {
 					//printf("pop index = %d  i = %d: ", pop_index, i);
-					generate_random_chromosome(a_sub_population[i], *params, seeds[pop_index]);
 					//printf("//////////////////////////////////\n");
-					fitness(a_sub_population[i], params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
+					compute_fitness(a_sub_population[i], params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 				}
 				// sort ascendingly by fitness inside this population
 				qsort((void *)a_sub_population, params->sub_population_size, sizeof(a_sub_population[0]), sort_function);
@@ -1009,12 +1003,12 @@ void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromo
 					// mutate the result and compute fitness
 					mutation(offspring1, *params, seeds[pop_index]);
 
-					fitness(offspring1, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
+					compute_fitness(offspring1, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 
 					// mutate the other offspring too
 					mutation(offspring2, *params, seeds[pop_index]);
 
-					fitness(offspring2, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
+					compute_fitness(offspring2, params->code_length, original_matrices, mask_matrices, num_training_images, *clip, work_matrix1, work_matrix2);
 
 
 					// replace the worst in the population
@@ -1034,19 +1028,10 @@ void evolve_one_subpopulation(int *current_subpop_index, t_seed* seeds, t_chromo
 	}
 }
 //---------------------------------------------------------------------------
-void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
+void start_steady_state_gp(t_chromosome **sub_populations, t_parameters &params, uint32_t initial_seed, t_seed* seeds, t_rgb ***original_matrices, t_rgb ***mask_matrices, int num_images, t_clip_region &clip, int image_width, int image_height)
 {
 	// a steady state model -
 	// Newly created inviduals replace the worst ones (if the offspring are better) in the same (sub) population.
-
-	// allocate memory for all sub populations
-	t_chromosome **sub_populations; // an array of sub populations
-	sub_populations = new t_chromosome*[params.num_sub_populations];
-	for (int p = 0; p < params.num_sub_populations; p++) {
-		sub_populations[p] = new t_chromosome[params.sub_population_size];
-		for (int i = 0; i < params.sub_population_size; i++)
-			allocate_chromosome(sub_populations[p][i], params); // allocate each individual in the subpopulation
-	}
 
 #ifdef USE_THREADS
 	// allocate memory for
@@ -1065,7 +1050,7 @@ void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* 
 	allocate_matrix(work_matrix2, clip.width + 2 * CA_radius, clip.height + 2 * CA_radius);
 #endif
 
-	int num_training_images = 1;
+	int num_training_images = 3;
 
 	unsigned long best_fitness_so_far = LONG_MAX;
 	int best_subpopulation_index = 0;
@@ -1113,7 +1098,7 @@ void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* 
 #endif
 
 			char file_name[50];
-			for (int c = 0; c < 3; c++) {
+			for (int c = 0; c < num_images; c++) {
 				sprintf(file_name, "ca_%u_%d_%d.bmp", initial_seed, generation, c);
  				test_ca(sub_populations[best_subpopulation_index][0], params.code_length, original_matrices[c], image_width, image_height, file_name);
 			}
@@ -1132,6 +1117,8 @@ void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* 
 				qsort((void *)sub_populations[index_next_pop], params.sub_population_size, sizeof(sub_populations[0][0]), sort_function);
 			}
 		}
+
+		save_state(params.num_sub_populations, params.sub_population_size, params.code_length, seeds, sub_populations, generation, int initial_seed);
 	}
 
 #ifdef USE_THREADS
@@ -1158,6 +1145,60 @@ void start_steady_state_gp(t_parameters &params, uint32_t initial_seed, t_seed* 
 	delete_matrix(work_matrix1, clip.height + 2 * CA_radius);
 	delete_matrix(work_matrix2, clip.height + 2 * CA_radius);
 #endif
+}
+//--------------------------------------------------------------------
+bool save_state(int num_sub_populations, int sub_population_size, int code_length, t_seed *seeds, t_chromosome **sub_populations, int current_generation_index, int initial_seed)
+{
+	char filename[100];
+	sprintf(filename, "state_%d_%d.txt", current_generation_index, initial_seed);
+	FILE *f = fopen(filename, "w");
+
+	if (!f)
+		return false;
+
+	// save parameters
+	fprintf(f, "%d %d %d %d\n", num_sub_populations, sub_population_size, code_length, current_generation_index);
+
+	// save the population
+	char *buffer = new char[code_length * 5 * 11];
+	for (int p = 0; p < num_sub_populations; p++) {
+		//save seeds
+		fprintf(f, "%d %d %d %d\n", seeds[p].z1, seeds[p].z2, seeds[p].z3, seeds[p].z4);
+		for (int c = 0; c < sub_population_size; c++) {
+			sub_populations[p][c].to_string(buffer, code_length);
+			fprintf(f, "%d\n", buffer);
+		}
+	}
+
+	fclose(f);
+}
+//--------------------------------------------------------------------
+bool load_state(char *filename, t_seed *seeds, t_chromosome **sub_populations, int &current_generation_index)
+{
+	FILE *f = fopen(filename, "r");
+
+	if (!f)
+		return false;
+
+	int num_sub_populations, int sub_population_size, int code_length;
+
+	// load parameters
+	fscanf(f, "%d %d %d %d\n", &num_sub_populations, &sub_population_size, &code_length, &current_generation_index);
+
+
+	// load the population
+	char *buffer = new char[code_length * 5 * 11];
+	for (int p = 0; p < num_sub_populations; p++) {
+		// load seeds
+		fscanf(f, "%d %d %d %d\n", &seeds[p].z1, &seeds[p].z2, &seeds[p].z3, &seeds[p].z4);
+
+		for (int c = 0; c < sub_population_size; c++) {
+			fgets(buffer, code_length * 5 * 11, f);
+			sub_populations[p][c].from_string(buffer, code_length);
+		}
+	}
+
+	fclose(f);
 }
 //--------------------------------------------------------------------
 bool read_image(const char* file_name, t_rgb **&matrix, unsigned long& image_width, unsigned long &image_height)
@@ -1384,7 +1425,7 @@ int main(int argc, char** argv)
 {
 	t_parameters params;
 	params.num_sub_populations = 6;
-	params.sub_population_size = 200;				// the number of individuals in population  (must be an even number!)
+	params.sub_population_size = 1000;				// the number of individuals in population  (must be an even number!)
 	params.code_length = 30;
 	params.num_generations = 100000;				// the number of generations
 	params.mutation_probability = 0.01;             // mutation probability
@@ -1418,30 +1459,64 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-
 	// working on a clip, not on the full image
 	t_clip_region clip;
+	// clip MUST contain both object and background
 	clip.top_x = 0;
-	clip.top_y = 140;
+	clip.top_y = 120;
 	clip.width = image_width;
-	clip.height = 80; // image_height;
+	clip.height = 30; // image_height;
 
-	printf("evolving...\n");
+	char save_state_filename[1000];
+	save_state_filename[0] = 0;
+	t_seed* seeds = new t_seed[params.num_sub_populations];
+
 
 	time_t start_time;
 	time(&start_time);
 
+	// allocate memory for all sub populations
+	t_chromosome **sub_populations; // an array of sub populations
+	sub_populations = new t_chromosome*[params.num_sub_populations];
+	for (int p = 0; p < params.num_sub_populations; p++) {
+		sub_populations[p] = new t_chromosome[params.sub_population_size];
+		for (int i = 0; i < params.sub_population_size; i++)
+			allocate_chromosome(sub_populations[p][i], params); // allocate each individual in the subpopulation
+	}
+
+	int current_generation_index;
+
 	uint32_t initial_seed;
-	if (argc == 1)
-		initial_seed = 12345; // must be greater than 127
-	else
-		initial_seed = atoi(argv[1]);
+	if (argc == 1) {
+		initial_seed = 10000; // must be greater than 127
 
-	t_seed* seeds = new t_seed[params.num_sub_populations];
-	for (int i = 0; i < params.num_sub_populations; i++)
-		seeds[i].init(initial_seed, i);
+		for (int p = 0; p < params.num_sub_populations; p++) {
+			seeds[p].init(initial_seed, p);
+			for (int c = 0; c < params.sub_population_size; c++)
+				generate_random_chromosome(sub_populations[p][c], params, seeds[p]);
+		}
+	}
+	else// 2 arguments
+		// it can be either an int (initial seed)
+		// or a string (state)
+		if (argv[1][0] == 's') {// state
+			if (!load_state("state_x_x.txt", seeds, sub_populations, current_generation_index)) {
+				printf("Cannot load state. Press Enter!");
+				getchar();
+			}
+		}
+		else {// seed
+			initial_seed = atoi(argv[1]);
 
-	start_steady_state_gp(params, initial_seed, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
+			for (int p = 0; p < params.num_sub_populations; p++) {
+				seeds[p].init(initial_seed, p);
+				for (int c = 0; c < params.sub_population_size; c++) 
+				generate_random_chromosome(sub_populations[p][c], params, seeds[p]);
+			}
+		}
+
+	printf("evolving...\n");
+	start_steady_state_gp(sub_populations, params, initial_seed, seeds, original_matrix, mask_matrix, num_images, clip, image_width, image_height);
 
 	time_t end_time;
 	time(&end_time);
